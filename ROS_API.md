@@ -73,6 +73,7 @@ Enforced by
 [sensor_msgs/LaserScan]: https://docs.ros.org/en/jazzy/p/sensor_msgs/msg/LaserScan.html
 [std_msgs/String]: https://docs.ros.org/en/jazzy/p/std_msgs/msg/String.html
 [tf2_msgs/TFMessage]: https://docs.ros.org/en/jazzy/p/tf2_msgs/msg/TFMessage.html
+[trajectory_msgs/JointTrajectory]: https://docs.ros.org/en/jazzy/p/trajectory_msgs/msg/JointTrajectory.html
 
 | 🤖  | 🖥️  | TOPIC                                          | DESCRIPTION                                                                                                                   |
 | --- | --- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -89,6 +90,7 @@ Enforced by
 | ✅  | ✅  | **`set_pose`**                                 | Changes the robot's `odometry/filtered` pose. <br /> _[geometry_msgs/PoseWithCovarianceStamped]_                                     |
 | ✅  | ✅  | **`tf`**                                       | Publishes transformations between coordinate frames over time. <br /> _[tf2_msgs/TFMessage]_                                  |
 | ✅  | ✅  | **`tf_static`**                                | Publishes static transformations between coordinate frames. <br /> _[tf2_msgs/TFMessage]_                                     |
+| ❌  | ✅  | **`wrist_roll_controller/joint_trajectory`**   | ROSbot XL `manipulation*`, simulation only. Rotates the gripper about the tool axis (`joint5`), which exists only in the simulated URDF — the physical arm has no roll servo. See [MANIPULATOR.md](MANIPULATOR.md). <br /> _[trajectory_msgs/JointTrajectory]_ |
 
 There are also additional topics related with the ROSbot firmware. For more information about them, please refer to the [ROSbot Firmware documentation](https://github.com/husarion/rosbot-firmware/blob/jazzy/ROS_API.md).
 

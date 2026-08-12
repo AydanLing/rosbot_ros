@@ -144,3 +144,82 @@ def test_components_config_derived_from_configuration():
         "components_config did not derive from configuration. "
         "Did rosbot_xl.urdf.xacro lose its soft-compat property?"
     )
+
+
+def _process_xacro_sim(use_sim):
+    """manipulation_pro URDF at a chosen use_sim, which the default matrix does
+    not vary (it always renders the hardware path)."""
+    share = get_package_share_directory("rosbot_description")
+    xacro_path = os.path.join(share, "urdf", "rosbot_xl.urdf.xacro")
+    doc = xacro.process_file(
+        xacro_path,
+        mappings={
+            "mecanum": "True",
+            "configuration": "manipulation_pro",
+            "use_sim": use_sim,
+        },
+    )
+    return doc.toxml()
+
+
+# Simulation-only arm additions, and the stock geometry they replace.
+_SIM_ONLY_ARM = ['name="joint5"', 'name="link5_roll"', "WristRollSystem"]
+_STOCK_JAW_MESHES = ["gripper_left_palm", "gripper_right_palm"]
+
+
+def test_wrist_roll_and_taper_jaws_are_simulation_only():
+    """joint5 and the tapered V jaws exist only when use_sim is true.
+
+    The physical OpenMANIPULATOR-X is 4-DOF with no roll servo, and
+    dynamixel_hardware_interface is pinned to number_of_joints=5 (four arm
+    joints plus the gripper), so a fifth arm joint on the hardware path has
+    nothing to drive it. See CLAUDE.md §9 (2026-05-19) for the earlier attempt
+    to add a joint there that the driver rejected.
+    """
+    sim = _process_xacro_sim("True")
+    hw = _process_xacro_sim("False")
+
+    missing = [tag for tag in _SIM_ONLY_ARM if tag not in sim]
+    assert not missing, (
+        "simulation URDF lost its wrist-roll additions: " + ", ".join(missing)
+    )
+
+    leaked = [tag for tag in _SIM_ONLY_ARM if tag in hw]
+    assert not leaked, (
+        "wrist roll leaked into the hardware URDF: "
+        + ", ".join(leaked)
+        + ". The 4-DOF arm cannot drive joint5; keep it gated on use_sim."
+    )
+
+    # The tapered jaws replace the stock palm meshes rather than adding to them.
+    for mesh in _STOCK_JAW_MESHES:
+        assert mesh in hw, f"hardware URDF must keep the stock jaw mesh {mesh}"
+        assert mesh not in sim, (
+            f"stock jaw mesh {mesh} is still in the simulation URDF — the "
+            "tapered V jaws are meant to replace it, not sit alongside it."
+        )
+
+
+def test_taper_jaw_collisions_are_convex_primitives():
+    """Jaw collision must stay boxes, never a single notched mesh.
+
+    The V notch is the whole point of the tapered jaw, and a mesh collision is
+    run through a convex hull by the physics engine, which fills the notch in
+    and silently removes the feature that does the gripping.
+    """
+    sim = _process_xacro_sim("True")
+    root = ET.fromstring(sim)
+    for link_name in ("gripper_left_link", "gripper_right_link"):
+        link = root.find(f'.//link[@name="{link_name}"]')
+        assert link is not None, f"{link_name} missing from simulation URDF"
+        collisions = link.findall("collision")
+        assert collisions, f"{link_name} has no collision geometry"
+        for collision in collisions:
+            assert collision.find(".//mesh") is None, (
+                f"{link_name} uses a mesh collision; the convex hull of the "
+                "tapered jaw fills in its V notch. Use box primitives."
+            )
+            assert collision.find(".//box") is not None, (
+                f"{link_name} collision is neither box nor mesh — the taper "
+                "geometry expects boxes."
+            )

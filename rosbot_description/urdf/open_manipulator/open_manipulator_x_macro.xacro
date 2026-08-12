@@ -11,7 +11,11 @@
                     use_mock_hardware:=false
                     mock_sensor_commands:=false
                     use_sim:=false
+                    wrist_roll:='false'
+                    taper_jaws:='false'
                     port_name:='/dev/ttyUSB0'">
+
+    <xacro:property name="roll_on" value="${wrist_roll in ['true', 'True', True]}"/>
 
     <!-- PROPERTIES -->
     <xacro:property name="prefix" value="${device_namespace + '_' if device_namespace != '' else ''}" />
@@ -26,7 +30,9 @@
       prefix="${prefix}"
       parent_link="${parent_link}"
       xyz="${xyz}"
-      rpy="${rpy}" />
+      rpy="${rpy}"
+      wrist_roll="${wrist_roll}"
+      taper_jaws="${taper_jaws}" />
 
     <!-- ROS2 CONTROL PLUGINS -->
     <xacro:ros2_control.open_manipulator_x_system
@@ -36,6 +42,24 @@
       use_mock_hardware="${use_mock_hardware}"
       mock_sensor_commands="${mock_sensor_commands}"
       port_name="${port_name}" />
+
+    <!-- Wrist roll gets its own ros2_control system rather than being added to
+         the upstream OpenManipulatorXSystem block, which lives in
+         open_manipulator_description and hardcodes joints 1-4 plus the gripper.
+         Keeping it separate avoids forking that upstream file. Simulation only,
+         so the Dynamixel hardware path never sees this joint. -->
+    <xacro:if value="${roll_on}">
+      <ros2_control name="WristRollSystem" type="system">
+        <hardware>
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </hardware>
+        <joint name="${prefix}joint5">
+          <command_interface name="position"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+        </joint>
+      </ros2_control>
+    </xacro:if>
 
     <!-- GAZEBO PLUGINS -->
     <xacro:if value="${use_sim}">

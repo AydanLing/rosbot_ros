@@ -74,7 +74,7 @@ How the repo is wired: packages, roles, integration points. Public topics → [R
 ### `rosbot_controller` — ros2_control + manipulator
 
 - [controller.yaml](rosbot_controller/launch/controller.yaml) — sed-resolves `controllers.yaml` → `/tmp/rosbot_controller_<ns>.yaml` (substitutes `<namespace>/`, `<manipulator_state>`), starts `controller_manager` (HW only), spawns `{differential,mecanum}_drive_controller` + `imu_broadcaster` + `joint_state_broadcaster` after 3 s. If `configuration` starts with `manipulation` → `manipulator.yaml` after 5 s.
-- [manipulator.yaml](rosbot_controller/launch/manipulator.yaml) — `manipulator_controller` + `gripper_controller` (both JTC), `move_group.launch.py`, `servo.launch.py`, `home.launch.py` (after 10 s, with MoveIt config injection).
+- [manipulator.yaml](rosbot_controller/launch/manipulator.yaml) — `manipulator_controller` + `gripper_controller` (both JTC), `move_group.launch.py`, `servo.launch.py`, `home.launch.py` (after 10 s, with MoveIt config injection). Takes `use_sim` (passed down from [controller.yaml](rosbot_controller/launch/controller.yaml)) and, only when set, additionally spawns `wrist_roll_controller` (JTC on `joint5`). That joint exists only in the simulated URDF, so the controller is a separate one rather than a fifth joint on `manipulator_controller`, which would otherwise fail to claim its interfaces on the 4-DOF hardware. See [MANIPULATOR.md](MANIPULATOR.md).
 - Spawner remaps drive controller's `~/cmd_vel:=cmd_vel`, `~/odom:=odometry/wheels`, `~/imu:=imu/data` — canonical public names.
 - `scripts/arm_control active|inactive` — toggles `OpenManipulatorXSystem` + arm controllers.
 

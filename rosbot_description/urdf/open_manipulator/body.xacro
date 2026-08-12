@@ -7,10 +7,104 @@
                     xyz:='0.0 0.0 0.0'
                     rpy:='0.0 0.0 0.0'
                     namespace:=''
-                    prefix:=''">
+                    prefix:=''
+                    wrist_roll:='false'
+                    taper_jaws:='false'">
+
+    <!-- Optional wrist roll about the tool axis, inserted between link5 and the
+         gripper. Off by default and only switched on for simulation: the real
+         OpenMANIPULATOR-X is 4-DOF with no such servo, and the Dynamixel driver
+         is pinned to number_of_joints=5 (4 arm plus gripper), so a fifth arm
+         joint on the hardware path would not map to anything. -->
+    <xacro:property name="roll_on" value="${wrist_roll in ['true', 'True', True]}"/>
+    <xacro:property name="gripper_parent" value="${prefix + ('link5_roll' if roll_on else 'link5')}"/>
+
+    <!-- Tapered V jaws, shaped for a shuttlecock lying on its side.
+         The stock jaws are flat parallel plates, so against a cone they touch
+         only at the widest station: point contact, and the cone pivots and
+         rolls straight out. Each jaw here is two pads instead:
+           * both pads pitched by the cone's 18 deg half-angle, so the faces
+             stay parallel to the flank along their whole length rather than
+             meeting it at a point,
+           * the pair splayed into a 120 deg included V whose valley runs along
+             the cone axis, giving two contact lines per side that box the
+             object in and stop it rolling.
+         Collision is boxes, deliberately. A single notched mesh would be run
+         through a convex hull by the physics engine, which fills the notch in
+         and throws away the part that does the work. -->
+    <xacro:property name="taper_on" value="${taper_jaws in ['true', 'True', True]}"/>
+    <xacro:property name="cone_half_angle" value="0.3142"/>   <!-- 18 deg -->
+    <xacro:property name="v_half_angle" value="1.0472"/>      <!-- 120 deg included -->
+    <xacro:property name="pad_x" value="0.030"/>              <!-- along the blade -->
+    <xacro:property name="pad_t" value="0.005"/>              <!-- thickness -->
+    <xacro:property name="pad_z" value="0.075"/>              <!-- along the cone axis -->
+    <xacro:property name="pad_centre_x" value="0.045"/>       <!-- matches GRASP_OFFSET -->
+    <xacro:property name="pad_split" value="0.016"/>          <!-- V half-width -->
+    <!-- Kept small so the jaws still open wider than the 65 mm skirt: the gap
+         is 2*(0.021 + q - inset), which at the open stop leaves a few mm a
+         side to drop over the object instead of knocking it. -->
+    <xacro:property name="pad_inset" value="0.001"/>
+
+    <!-- One pad. side=+1 for the left jaw, -1 for the right. lobe=+1/-1 picks
+         which half of the V. -->
+    <xacro:macro name="taper_pad" params="side lobe">
+      <collision>
+        <origin xyz="${pad_centre_x + lobe * pad_split} ${-side * pad_inset} 0"
+                rpy="${side * cone_half_angle} 0 ${side * lobe * (v_half_angle / 2)}"/>
+        <geometry>
+          <box size="${pad_x} ${pad_t} ${pad_z}"/>
+        </geometry>
+        <surface>
+          <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
+        </surface>
+      </collision>
+      <visual>
+        <origin xyz="${pad_centre_x + lobe * pad_split} ${-side * pad_inset} 0"
+                rpy="${side * cone_half_angle} 0 ${side * lobe * (v_half_angle / 2)}"/>
+        <geometry>
+          <box size="${pad_x} ${pad_t} ${pad_z}"/>
+        </geometry>
+        <material name="jaw_grey">
+          <color rgba="0.25 0.25 0.28 1"/>
+        </material>
+      </visual>
+    </xacro:macro>
+
+    <!-- Backing plate carrying the pads back to the joint. -->
+    <xacro:macro name="taper_spine" params="side">
+      <collision>
+        <origin xyz="0.030 ${-side * 0.001} 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.060 0.008 0.030"/>
+        </geometry>
+      </collision>
+      <visual>
+        <origin xyz="0.030 ${-side * 0.001} 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="0.060 0.008 0.030"/>
+        </geometry>
+        <material name="jaw_grey">
+          <color rgba="0.25 0.25 0.28 1"/>
+        </material>
+      </visual>
+    </xacro:macro>
 
     <xacro:property name="meshes_dir" value="package://open_manipulator_description/meshes/open_manipulator_x"/>
     <xacro:property name="link1_length" value="0.06"/>
+    <!-- Stall torque in Nm of the XM430-W350 servos used by the
+         OpenMANIPULATOR-X at 12 V. The joints previously carried a placeholder
+         effort of 1, below what joint2 needs just to hold the arm out. It
+         settled about 0.2 rad short of any commanded reach-down pose, leaving
+         the gripper roughly 30 mm high. The prismatic gripper joints are in
+         newtons, not Nm, and are set separately below. -->
+    <xacro:property name="servo_effort" value="4.1"/>
+    <!-- Grip force in N for the prismatic finger joints, left at the original
+         value. In free space the fingers track every commanded position
+         exactly, including the fully closed -0.009, so 1 N is not the limit on
+         normal operation. Raising it to 15 N was tried and did not help the
+         fingers close while in contact with the target, so it was reverted
+         rather than left as an unexplained deviation. -->
+    <xacro:property name="gripper_effort" value="1"/>
 
     <xacro:if value="${parent_link != ''}">
       <joint name="${prefix}${parent_link}_to_link1" type="fixed">
@@ -57,7 +151,7 @@
       <!-- Fix origin on custom cylinder -->
       <origin xyz="0.0 0.0 0.017" rpy="0 0 0"/>
       <axis xyz="0 0 1"/>
-      <limit velocity="4.8" effort="1" lower="${-4/5*pi}" upper="${pi}" />
+      <limit velocity="4.8" effort="${servo_effort}" lower="${-4/5*pi}" upper="${pi}" />
       <dynamics damping="0.1"/>
     </joint>
 
@@ -93,7 +187,7 @@
       <child link="${prefix}link3"/>
       <origin xyz="0.0 0.0 0.0595" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit velocity="4.8" effort="1" lower="${-pi/2}" upper="${pi/2}" />
+      <limit velocity="4.8" effort="${servo_effort}" lower="${-pi/2}" upper="${pi/2}" />
       <dynamics damping="0.1"/>
     </joint>
 
@@ -129,7 +223,7 @@
       <child link="${prefix}link4"/>
       <origin xyz="0.024 0 0.128" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit velocity="4.8" effort="1" lower="${-1.5}" upper="${1.4}" />
+      <limit velocity="4.8" effort="${servo_effort}" lower="${-1.5}" upper="${1.4}" />
       <dynamics damping="0.1"/>
     </joint>
 
@@ -165,7 +259,7 @@
       <child link="${prefix}link5"/>
       <origin xyz="0.124 0.0 0.0" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit velocity="4.8" effort="1" lower="${-1.7}" upper="${1.97}" />
+      <limit velocity="4.8" effort="${servo_effort}" lower="${-1.7}" upper="${1.97}" />
       <dynamics damping="0.1"/>
     </joint>
 
@@ -196,32 +290,64 @@
       </inertial>
     </link>
 
+    <!-- Wrist roll. Axis 1 0 0 is link5's own x, which is the tool axis the
+         gripper points along, so this spins the jaws about their approach
+         direction without moving the grasp point. That keeps the position
+         kinematics of joints 1-4 untouched. -->
+    <xacro:if value="${roll_on}">
+      <joint name="${prefix}joint5" type="revolute">
+        <parent link="${prefix}link5"/>
+        <child link="${prefix}link5_roll"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <axis xyz="1 0 0"/>
+        <limit velocity="4.8" effort="${servo_effort}" lower="${-pi}" upper="${pi}" />
+        <dynamics damping="0.1"/>
+      </joint>
+
+      <link name="${prefix}link5_roll">
+        <inertial>
+          <origin xyz="0 0 0" />
+          <mass value="1.0e-03" />
+          <inertia ixx="1.0e-06" ixy="0.0" ixz="0.0"
+                   iyy="1.0e-06" iyz="0.0"
+                   izz="1.0e-06" />
+        </inertial>
+      </link>
+    </xacro:if>
+
     <joint name="${prefix}gripper_left_joint" type="prismatic">
-      <parent link="${prefix}link5"/>
+      <parent link="${gripper_parent}"/>
       <child link="${prefix}gripper_left_link"/>
       <origin xyz="0.0817 0.021 0.0" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit velocity="4.8" effort="1" lower="-0.010" upper="0.019" />
+      <limit velocity="4.8" effort="${gripper_effort}" lower="-0.010" upper="0.019" />
       <dynamics damping="0.1"/>
     </joint>
 
     <link name="${prefix}gripper_left_link">
-      <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="${meshes_dir}/gripper_left_palm.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="grey">
-          <color rgba="0.2 0.2 0.2 1"/>
-        </material>
-      </visual>
+      <xacro:if value="${taper_on}">
+        <xacro:taper_spine side="1"/>
+        <xacro:taper_pad side="1" lobe="1"/>
+        <xacro:taper_pad side="1" lobe="-1"/>
+      </xacro:if>
+      <xacro:unless value="${taper_on}">
+        <visual>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="${meshes_dir}/gripper_left_palm.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+          <material name="grey">
+            <color rgba="0.2 0.2 0.2 1"/>
+          </material>
+        </visual>
 
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="${meshes_dir}/gripper_left_palm.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-      </collision>
+        <collision>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="${meshes_dir}/gripper_left_palm.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+        </collision>
+      </xacro:unless>
 
       <inertial>
         <origin xyz="0 0 0" />
@@ -233,32 +359,39 @@
     </link>
 
     <joint name="${prefix}gripper_right_joint" type="prismatic">
-      <parent link="${prefix}link5"/>
+      <parent link="${gripper_parent}"/>
       <child link="${prefix}gripper_right_link"/>
       <origin xyz="0.0817 -0.021 0" rpy="0 0 0"/>
       <axis xyz="0 -1 0"/>
-      <limit velocity="4.8" effort="1" lower="-0.010" upper="0.019" />
+      <limit velocity="4.8" effort="${gripper_effort}" lower="-0.010" upper="0.019" />
       <mimic joint="${prefix}gripper_left_joint" multiplier="1"/>
       <dynamics damping="0.1"/>
     </joint>
 
     <link name="${prefix}gripper_right_link">
-      <visual>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="${meshes_dir}/gripper_right_palm.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-        <material name="grey">
-          <color rgba="0.2 0.2 0.2 1"/>
-        </material>
-      </visual>
+      <xacro:if value="${taper_on}">
+        <xacro:taper_spine side="-1"/>
+        <xacro:taper_pad side="-1" lobe="1"/>
+        <xacro:taper_pad side="-1" lobe="-1"/>
+      </xacro:if>
+      <xacro:unless value="${taper_on}">
+        <visual>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="${meshes_dir}/gripper_right_palm.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+          <material name="grey">
+            <color rgba="0.2 0.2 0.2 1"/>
+          </material>
+        </visual>
 
-      <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <geometry>
-          <mesh filename="${meshes_dir}/gripper_right_palm.stl" scale="0.001 0.001 0.001"/>
-        </geometry>
-      </collision>
+        <collision>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <geometry>
+            <mesh filename="${meshes_dir}/gripper_right_palm.stl" scale="0.001 0.001 0.001"/>
+          </geometry>
+        </collision>
+      </xacro:unless>
 
       <inertial>
         <origin xyz="0 0 0" />
@@ -270,7 +403,7 @@
     </link>
 
     <joint name="${prefix}end_effector_joint" type="fixed">
-      <parent link="${prefix}link5"/>
+      <parent link="${gripper_parent}"/>
       <child link="${prefix}end_effector_link"/>
       <origin xyz="0.126 0.0 0.0" rpy="0 0 0"/>
     </joint>

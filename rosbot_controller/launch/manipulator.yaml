@@ -10,6 +10,13 @@ launch:
         - value: 'False'
 
   - arg:
+      name: use_sim
+      default: 'False'
+      description: >-
+        Whether this is a simulated robot. The wrist roll joint (joint5) only
+        exists in the simulated URDF, so its controller is spawned only here.
+
+  - arg:
       name: controller_manager_timeout
       default: '60'
       description: >-
@@ -36,6 +43,15 @@ launch:
         --controller-manager-timeout $(var controller_manager_timeout)
         --inactive
       unless: $(var arm_activate)
+
+  - node:
+      pkg: controller_manager
+      exec: spawner
+      args: >
+        wrist_roll_controller
+        -c controller_manager
+        --controller-manager-timeout $(var controller_manager_timeout)
+      if: $(var use_sim)
 
   - include:
       file: $(find-pkg-share rosbot_moveit)/launch/move_group.launch.py

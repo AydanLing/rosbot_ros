@@ -170,5 +170,7 @@ launch:
             let:
               - name: arm_activate
                 value: $(var arm_activate)
+              - name: use_sim
+                value: $(var use_sim)
               - name: controller_manager_timeout
                 value: $(var controller_manager_timeout)

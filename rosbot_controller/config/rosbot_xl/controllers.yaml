@@ -18,6 +18,9 @@
       # stair-step motion when joy2servo pushes targets at 20 Hz.
       gripper_controller:
         type: joint_trajectory_controller/JointTrajectoryController
+      # Simulation only, see the wrist_roll_controller parameters below.
+      wrist_roll_controller:
+        type: joint_trajectory_controller/JointTrajectoryController
 
       hardware_components_initial_state:
         <manipulator_state>:
@@ -177,6 +180,26 @@
       constraints:
         stopped_velocity_tolerance: 0.01
         goal_time: 0.0 # Defaults to 0.0 (start immediately)
+
+  # Simulation only. joint5 exists solely when the URDF is built with
+  # wrist_roll:=true, which rosbot_xl.urdf.xacro ties to use_sim, so this
+  # controller is spawned from manipulator.yaml under the same condition.
+  # It is deliberately its own controller rather than a fifth joint on
+  # manipulator_controller, which would make that controller fail to claim its
+  # interfaces on the 4-DOF hardware.
+  wrist_roll_controller:
+    ros__parameters:
+      joints:
+        - joint5
+      interface_name: position
+      command_interfaces:
+        - position
+      state_interfaces:
+        - position
+        - velocity
+      state_publish_rate: 200.0
+      action_monitor_rate: 20.0
+      allow_nonzero_velocity_at_trajectory_end: true
 
   gripper_controller:
     ros__parameters:

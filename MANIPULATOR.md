@@ -143,6 +143,61 @@ For more advanced purpose you may want to change default **manipulator position*
 2. Servo setting
    Check/change some servo parameters in [Dynamixel Wizard 2.0](https://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_wizard2/).
 
+### Simulation-only arm features
+
+Two additions exist **only** when the URDF is built with `use_sim:=True`. The
+physical OpenMANIPULATOR-X is 4-DOF with no roll servo, and
+`dynamixel_hardware_interface` is pinned to `number_of_joints=5` (four arm
+joints plus the gripper), so neither can be driven on hardware. Both are gated
+by xacro args (`wrist_roll`, `taper_jaws`) that
+[`rosbot_xl.urdf.xacro`](rosbot_description/urdf/rosbot_xl.urdf.xacro) ties to
+`use_sim`. Guarded by `test_wrist_roll_and_taper_jaws_are_simulation_only`.
+
+**Wrist roll (`joint5`)** — a revolute joint between `link5` and the gripper,
+turning about the tool axis, so it spins the jaws about their approach
+direction without moving the grasp point. Position kinematics for joints 1-4
+are therefore unchanged, and the MoveIt `manipulator` group and SRDF are
+untouched: `joint5` is deliberately **not** part of that group. It runs on its
+own `wrist_roll_controller`, commanded directly like the joystick gripper:
+
+```bash
+ros2 topic pub --once /wrist_roll_controller/joint_trajectory \
+  trajectory_msgs/msg/JointTrajectory \
+  '{joint_names: [joint5], points: [{positions: [0.785], time_from_start: {sec: 1}}]}'
+```
+
+With the tool pointing straight down, `link5` x is `(0,0,-1)` and its y (the jaw
+line) is the arm's pitch axis at bearing `joint1+90`, so `z = x × y` puts the
+jaw's z at bearing `-joint1`, and rolling by `theta` about a downward axis turns
+bearings by `-theta`:
+
+```
+jaw_z_bearing = -joint1 - theta
+```
+
+**Tapered V jaws** — replaces the stock flat palms. Each jaw is two pads pitched
+by 18° (the half-angle of a badminton shuttlecock's cone, 13→32.5 mm over
+60 mm) and splayed into a 120° included V whose valley runs along the object
+axis. Flat parallel jaws touch a cone only at its widest station, so it pivots
+and rolls out; the pitched pads stay parallel to the flank along their length
+and the V gives two contact lines a side.
+
+The jaw collision is **boxes, not a mesh** — the physics engine takes a convex
+hull of mesh collisions, which fills the V notch in and removes the only feature
+doing the work. `test_taper_jaw_collisions_are_convex_primitives` pins this.
+
+The V is not symmetric end to end: its gap narrows toward `+z`, so the narrow
+end of a tapered object must be placed there. Getting that 180° wrong points the
+taper the wrong way and grips worse than a flat jaw.
+
+> **Arm joint effort** was raised from a placeholder `1` to `4.1` N·m
+> (`servo_effort` in [`body.xacro`](rosbot_description/urdf/open_manipulator/body.xacro)),
+> the XM430-W350 stall torque at 12 V. At `1` N·m joint2 could not hold the arm
+> out and settled ~0.2 rad short of any commanded reach-down pose, putting the
+> gripper ~30 mm high. This affects **both** hardware and simulation. The
+> prismatic gripper joints keep their original value; raising them to 15 N was
+> tried and did not help close against contact, so it was reverted.
+
 ### Troubleshooting
 
 - **Gripper does not move** - it could be caused by the wrong initial position. Turn off the torque as described in the [**Resetting the manipulator**](/tutorials/ros-projects/rosbot-xl-openmanipulator-x/#resetting-the-manipulator). Now manually rotate the hub of the manipulator servo 180 degrees (if the connecting rod of the left finger was below the right finger's one, the hub should be rotated so that it is above). Now once again launch controllers.

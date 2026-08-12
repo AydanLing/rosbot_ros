@@ -39,6 +39,8 @@
       xyz="-0.11 0.0 0.0"
       device_namespace="''"
       use_sim="$(arg use_sim)"
+      wrist_roll="$(arg use_sim)"
+      taper_jaws="$(arg use_sim)"
       port_name="$(arg manipulator_serial_port)"/>
   </xacro:if>
 
