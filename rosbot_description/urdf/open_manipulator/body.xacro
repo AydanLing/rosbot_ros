@@ -40,10 +40,17 @@
     <xacro:property name="pad_z" value="0.075"/>              <!-- along the cone axis -->
     <xacro:property name="pad_centre_x" value="0.045"/>       <!-- matches GRASP_OFFSET -->
     <xacro:property name="pad_split" value="0.016"/>          <!-- V half-width -->
-    <!-- Kept small so the jaws still open wider than the 65 mm skirt: the gap
-         is 2*(0.021 + q - inset), which at the open stop leaves a few mm a
-         side to drop over the object instead of knocking it. -->
-    <xacro:property name="pad_inset" value="0.001"/>
+    <!-- Pads sit outboard of the finger frame. The naive gap of
+         2*(0.021 + q - inset) counts only the pad's 5 mm thickness and is
+         badly wrong here, because each pad is rotated 60 deg about z and 18 deg
+         about x, which swings its 30 mm and 75 mm dimensions into the closing
+         direction and brings the corners ~20 mm further in. At inset +0.001 the
+         real opening was 34.8 mm against a 65 mm skirt, so the jaws could never
+         fit around the object and knocked it aside on every approach.
+         At -0.019 the measured opening is 74.8 mm, clearing the 65 mm rim, and
+         22.8 mm closed, so the cork can still be pinched. Recompute the corner
+         extents if the pad size or either angle changes. -->
+    <xacro:property name="pad_inset" value="-0.019"/>
 
     <!-- One pad. side=+1 for the left jaw, -1 for the right. lobe=+1/-1 picks
          which half of the V. -->
@@ -73,13 +80,13 @@
     <!-- Backing plate carrying the pads back to the joint. -->
     <xacro:macro name="taper_spine" params="side">
       <collision>
-        <origin xyz="0.030 ${-side * 0.001} 0" rpy="0 0 0"/>
+        <origin xyz="0.030 ${-side * pad_inset} 0" rpy="0 0 0"/>
         <geometry>
           <box size="0.060 0.008 0.030"/>
         </geometry>
       </collision>
       <visual>
-        <origin xyz="0.030 ${-side * 0.001} 0" rpy="0 0 0"/>
+        <origin xyz="0.030 ${-side * pad_inset} 0" rpy="0 0 0"/>
         <geometry>
           <box size="0.060 0.008 0.030"/>
         </geometry>

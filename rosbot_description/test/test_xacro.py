@@ -223,3 +223,58 @@ def test_taper_jaw_collisions_are_convex_primitives():
                 f"{link_name} collision is neither box nor mesh — the taper "
                 "geometry expects boxes."
             )
+
+
+def test_taper_jaws_open_wider_than_the_target():
+    """The jaws must actually fit around a 65 mm shuttlecock skirt.
+
+    Computed from the rendered pad boxes rather than from pad_inset, because
+    each pad is rotated 60 deg about z and 18 deg about x: those rotations swing
+    the 30 mm and 75 mm pad dimensions into the closing direction and move the
+    corners ~20 mm inboard of where the thickness alone suggests. Sizing the
+    inset off the naive gap left a 34.8 mm opening against a 65 mm object, and
+    the jaws knocked it aside on every approach without any error being raised.
+    """
+    import itertools
+    import math
+
+    sim = _process_xacro_sim("True")
+    root = ET.fromstring(sim)
+
+    def rpy_matrix(r, p, y):
+        cr, sr, cp, sp, cy, sy = (math.cos(r), math.sin(r), math.cos(p),
+                                  math.sin(p), math.cos(y), math.sin(y))
+        return [
+            [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+            [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+            [-sp, cp * sr, cp * cr],
+        ]
+
+    joint = root.find('.//joint[@name="gripper_left_joint"]')
+    assert joint is not None, "gripper_left_joint missing"
+    mount_y = float(joint.find("origin").get("xyz").split()[1])
+    q_open = float(joint.find("limit").get("upper"))
+
+    link = root.find('.//link[@name="gripper_left_link"]')
+    closest = None
+    for collision in link.findall("collision"):
+        box = collision.find(".//box")
+        if box is None:
+            continue
+        hx, hy, hz = [float(v) / 2 for v in box.get("size").split()]
+        origin = collision.find("origin")
+        ox, oy, oz = [float(v) for v in origin.get("xyz").split()]
+        rot = rpy_matrix(*[float(v) for v in origin.get("rpy").split()])
+        for sx, sy_, sz in itertools.product((-1, 1), repeat=3):
+            local = (sx * hx, sy_ * hy, sz * hz)
+            dy = sum(rot[1][k] * local[k] for k in range(3))
+            dist = abs(mount_y + q_open + oy + dy)
+            closest = dist if closest is None else min(closest, dist)
+
+    assert closest is not None, "no box collisions found on the jaw"
+    opening = 2 * closest
+    assert opening > 0.070, (
+        f"tapered jaws open to only {1000 * opening:.1f} mm, which cannot clear "
+        "the 65 mm shuttlecock skirt. Check pad_inset against the *rotated* pad "
+        "corner extents, not the pad thickness."
+    )

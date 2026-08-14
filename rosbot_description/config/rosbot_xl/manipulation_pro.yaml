@@ -1,9 +1,18 @@
 ---
 # Custom components (own URDF + mesh): https://github.com/husarion/husarion_components_description#custom-component
 components:
+  # Rear-mounted, because the arm moved to the chassis front (+0.065) and works
+  # forward. Mounting the lidar ahead of it puts it inside the arm's swept
+  # volume -- MoveIt reports gripper_left_link colliding with rplidar_link on
+  # the descent. From back here the arm never reaches over it, and the only cost
+  # to the forward view is the arm's own base column, which subtends about
+  # +-10 deg at this spacing. Sits inside the chassis, whose rear edge is -0.167.
   - type: LDR06
     parent_link: cover_link
-    xyz: -0.01 0.0 0.0
+    # Raised 0.07 so the beam clears the arm's base column, which spans
+    # z 0.133..0.193 and otherwise blanked +-10 deg dead ahead -- measured, not
+    # assumed. On hardware this needs a riser of the same height.
+    xyz: -0.125 0.0 0.07
     rpy: 0.0 0.0 0.0
 
   - type: CAM05
