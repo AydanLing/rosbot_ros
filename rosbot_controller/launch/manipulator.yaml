@@ -55,6 +55,11 @@ launch:
 
   - include:
       file: $(find-pkg-share rosbot_moveit)/launch/move_group.launch.py
+      arg:
+        # Selects the gripper's Close named state. The simulation-only claw
+        # closes to -0.023; hardware stops at -0.010 and would reject it.
+        - name: use_sim
+          value: $(var use_sim)
 
   - include:
       file: $(find-pkg-share rosbot_moveit)/launch/servo.launch.py

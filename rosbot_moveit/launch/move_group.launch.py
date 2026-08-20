@@ -13,10 +13,12 @@
 # limitations under the License.
 
 from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
 from launch.substitutions import (
     Command,
     FindExecutable,
     PathJoinSubstitution,
+    LaunchConfiguration,
 )
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -53,6 +55,28 @@ def generate_launch_description():
     )
     moveit_config.robot_description = {"robot_description": robot_description_content}
 
+    # Override the builder's SRDF the same way, and for the same reason: the
+    # gripper's Close named state depends on which claw is rendered. body.xacro
+    # sets the lower stop to -0.023 with the simulation-only CAD claw and
+    # -0.010 otherwise, so a single value cannot serve both. Without this the
+    # sim closes to -0.009 and leaves a 28 mm gap the 26 mm cork slips through.
+    # MoveItConfigsBuilder already runs the SRDF through load_xacro(), so the
+    # file needs no rename to accept the argument.
+    robot_description_semantic_content = Command(
+        [
+            PathJoinSubstitution([FindExecutable(name="xacro")]),
+            " ",
+            PathJoinSubstitution(
+                [FindPackageShare("rosbot_moveit"), "config", "rosbot_xl.srdf"]
+            ),
+            " taper_jaws:=",
+            LaunchConfiguration("use_sim"),
+        ]
+    )
+    moveit_config.robot_description_semantic = {
+        "robot_description_semantic": robot_description_semantic_content
+    }
+
     move_group_configuration = {
         "publish_robot_description_semantic": True,
         "allow_trajectory_execution": True,
@@ -83,4 +107,14 @@ def generate_launch_description():
         parameters=move_group_params,
     )
 
-    return LaunchDescription([move_group_node])
+    declare_use_sim_arg = DeclareLaunchArgument(
+        "use_sim",
+        default_value="False",
+        description=(
+            "Simulation mode. Also selects the gripper's Close named state, "
+            "which differs because the simulation-only claw closes further."
+        ),
+        choices=["True", "true", "False", "false"],
+    )
+
+    return LaunchDescription([declare_use_sim_arg, move_group_node])

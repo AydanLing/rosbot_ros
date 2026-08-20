@@ -212,11 +212,35 @@ moves, so the open gap is unchanged. Measured on the finished geometry:
 
 > [!NOTE]
 > The MoveIt `Close` group state in
-> [`rosbot_xl.srdf`](rosbot_moveit/config/rosbot_xl.srdf) is still
-> `gripper_left_joint: -0.009` (a 28 mm gap). The new `-0.023` stop is reachable
-> only by commanding `gripper_controller/joint_trajectory` directly, which is
-> what `joy2servo` does. `joint_limits.yaml` has no explicit min/max for that
-> joint, so planning picks the URDF limit up automatically.
+> [`rosbot_xl.srdf`](rosbot_moveit/config/rosbot_xl.srdf) now tracks the stop
+> that is actually rendered. A single hardcoded value could not: `-0.023` is out
+> of bounds on hardware, where the limit is `-0.010`, and `setJointValueTarget`
+> rejects an out-of-bounds named state, which would break the gripper for
+> teleop; `-0.009` left the simulated jaws 28 mm apart, wide enough for the
+> 26 mm cork the `-0.023` stop exists to trap.
+>
+> `MoveItConfigsBuilder` loads the SRDF through `load_xacro()`, so the file
+> takes a `taper_jaws` argument despite its `.srdf` extension — no rename was
+> needed. It **defaults to the hardware-safe `-0.009`**, so any caller that
+> passes no mapping keeps its previous behaviour.
+> [`move_group.launch.py`](rosbot_moveit/launch/move_group.launch.py) gained a
+> `use_sim` argument and overrides the semantic description the same way it
+> already overrides the URDF; [`manipulator.yaml`](rosbot_controller/launch/manipulator.yaml)
+> passes it through.
+>
+> Guarded by `test_srdf_close_state_reaches_the_gripper_stop`, which renders
+> both the SRDF and the URDF and asserts the named state reaches the joint's
+> lower stop without exceeding it. The two files drifted apart once already.
+>
+> `joy2servo` and `dock` reach the state via `setNamedTarget("Close")`, so they
+> are the paths this affects. `grab_sequence`'s automated pick is unaffected: it
+> publishes to `gripper_controller/joint_trajectory` directly with its own
+> `-0.023`. `joint_limits.yaml` has no explicit min/max for that joint, so
+> planning picks the URDF limit up automatically.
+>
+> **Still open:** `servo.launch.py` and `dock.launch.py` build their own
+> `MoveItConfigsBuilder` without the mapping, so nodes launched from them hold
+> the hardware-default copy. Only `move_group`'s planning scene is corrected.
 
 > **Arm joint effort** was raised from a placeholder `1` to `4.1` N·m
 > (`servo_effort` in [`body.xacro`](rosbot_description/urdf/open_manipulator/body.xacro)),

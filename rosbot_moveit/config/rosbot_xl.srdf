@@ -3,7 +3,23 @@
     This is a format for representing semantic information about the robot structure.
     A URDF file must exist for this robot as well, where the joints and the links that are referenced are defined
 -->
-<robot name="rosbot_xl">
+<robot name="rosbot_xl" xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <!-- MoveItConfigsBuilder loads this file through load_xacro(), so xacro
+         directives are evaluated here even though the extension is .srdf.
+
+         The gripper's lower stop is not the same on both targets. body.xacro
+         sets gripper_lower to -0.023 when the tapered/CAD claw is rendered
+         (simulation only) and -0.010 otherwise, so a single hardcoded Close
+         value cannot be right for both: -0.023 is out of bounds on hardware
+         and setJointValueTarget would reject it, breaking the gripper for
+         teleop; -0.009 leaves the sim jaws 28 mm apart, wide enough for the
+         26 mm cork to slip through, the exact escape the -0.023 stop exists
+         to prevent.
+
+         Default is the hardware-safe value, so any caller that does not pass a
+         mapping keeps today's behaviour exactly. -->
+    <xacro:arg name="taper_jaws" default="false"/>
+    <xacro:property name="taper_on" value="${'$(arg taper_jaws)' in ['true', 'True']}"/>
     <!--GROUPS: Representation of a set of joints and links. This can be useful for specifying DOF to plan for, defining arms, end effectors, etc-->
     <!--LINKS: When a link is specified, the parent joint of that link (if it exists) is automatically included-->
     <!--JOINTS: When a joint is specified, the child link of that joint (which will always exist) is automatically included-->
@@ -43,7 +59,7 @@
         <joint name="gripper_left_joint" value="0.017"/>
     </group_state>
     <group_state name="Close" group="gripper">
-        <joint name="gripper_left_joint" value="-0.009"/>
+        <joint name="gripper_left_joint" value="${-0.023 if taper_on else -0.009}"/>
     </group_state>
     <!--END EFFECTOR: Purpose: Represent information about an end effector.-->
     <end_effector name="end_effector_link" parent_link="end_effector_link" group="gripper"/>

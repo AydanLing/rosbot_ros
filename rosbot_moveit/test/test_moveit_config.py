@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from conftest import load_yaml, srdf_root
+import os
+
+import pytest
+from conftest import load_yaml, share, srdf_root
 
 
 def test_srdf_groups_and_named_states():
@@ -75,3 +78,77 @@ def test_joint_limits_drops_passive_joint():
     assert "gripper_right_joint" not in cfg["joint_limits"]
     for joint in ["gripper_left_joint", "joint1", "joint2", "joint3", "joint4"]:
         assert joint in cfg["joint_limits"], f"Missing joint limits for {joint}"
+
+
+def _srdf_close_value(taper_jaws: str) -> float:
+    """Render the SRDF through xacro and return the gripper Close position.
+
+    MoveItConfigsBuilder loads the SRDF via load_xacro(), so the file carries a
+    taper_jaws argument even though it is named .srdf. Rendering it here is the
+    only way to see what MoveIt will actually receive.
+    """
+    import subprocess
+    import xml.etree.ElementTree as ET
+
+    out = subprocess.run(
+        ["xacro", share("config/rosbot_xl.srdf"), f"taper_jaws:={taper_jaws}"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    root = ET.fromstring(out.stdout)
+    for state in root.findall("group_state"):
+        if state.attrib["name"] == "Close":
+            return float(state.find("joint").attrib["value"])
+    raise AssertionError("no Close group_state in rendered SRDF")
+
+
+def _gripper_lower(use_sim: str) -> float:
+    """The gripper's actual lower stop in the rendered URDF."""
+    import subprocess
+    import xml.etree.ElementTree as ET
+
+    from ament_index_python.packages import get_package_share_directory
+
+    urdf = os.path.join(
+        get_package_share_directory("rosbot_description"), "urdf", "rosbot_xl.urdf.xacro"
+    )
+    out = subprocess.run(
+        ["xacro", urdf, f"use_sim:={use_sim}", "configuration:=manipulation_pro"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert out.returncode == 0, out.stderr
+    root = ET.fromstring(out.stdout)
+    for joint in root.iter("joint"):
+        if joint.get("name") == "gripper_left_joint":
+            return float(joint.find("limit").get("lower"))
+    raise AssertionError("no gripper_left_joint in rendered URDF")
+
+
+@pytest.mark.parametrize(
+    "taper_jaws,use_sim", [("false", "false"), ("true", "true")]
+)
+def test_srdf_close_state_reaches_the_gripper_stop(taper_jaws, use_sim):
+    """Close must close, on whichever target is built.
+
+    body.xacro moves the gripper's lower stop to -0.023 when the simulation
+    only claw is rendered and leaves it at -0.010 otherwise. A single hardcoded
+    Close value cannot satisfy both: -0.023 is out of bounds on hardware and
+    setJointValueTarget rejects it, while -0.009 leaves the simulated jaws
+    28 mm apart, wide enough for the 26 mm cork to slip through. That is what
+    this guards, because the two files drifted apart once already.
+    """
+    close = _srdf_close_value(taper_jaws)
+    lower = _gripper_lower(use_sim)
+
+    assert close >= lower, (
+        f"SRDF Close {close} is below the joint's lower stop {lower}; "
+        "setJointValueTarget will reject it"
+    )
+    assert close - lower <= 0.002, (
+        f"SRDF Close {close} does not reach the stop {lower}; "
+        f"the jaws stay {1000 * (close - lower):.0f} mm apart"
+    )
