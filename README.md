@@ -132,6 +132,18 @@ ros2 launch rosbot_gazebo simulation.yaml robot_model:=<rosbot/rosbot_xl>
 > [!TIP]
 > To read the arguments for individual launch files, add the `-s` flag to the `ros2 launch` command (e.g. `ros2 launch <pkg> <launch> ​​-s`)
 
+#### Derived arguments (not set from the command line)
+
+These exist as arguments but are wired from `use_sim` rather than exposed for you to pass. They are listed here so a search for the name lands somewhere.
+
+| Argument | Where | Description |
+| -------- | ----- | ----------- |
+| `wrist_roll` | [`rosbot_xl.urdf.xacro`](rosbot_description/urdf/rosbot_xl.urdf.xacro) → [`open_manipulator_x_macro.xacro`](rosbot_description/urdf/open_manipulator/open_manipulator_x_macro.xacro) | Adds `joint5`, a revolute roll about the tool axis between `link5` and the gripper, plus its own `WristRollSystem` `<ros2_control>` block. Hardwired to `use_sim`: the physical OpenMANIPULATOR-X has no roll servo. <br/> **_bool:_** `$(arg use_sim)` |
+| `taper_jaws` | same | Swaps the stock flat palm meshes for the CAD claw (mesh visual, box collision proxy) and drops the finger lower stop from `-0.010` to `-0.023`. Also hardwired to `use_sim`. <br/> **_bool:_** `$(arg use_sim)` |
+| `use_sim` | [`manipulator.yaml`](rosbot_controller/launch/manipulator.yaml) | Passed down from [`controller.yaml`](rosbot_controller/launch/controller.yaml). When true, additionally spawns `wrist_roll_controller`. |
+
+Both URDF args are simulation-only because `dynamixel_hardware_interface` is pinned to `number_of_joints=5`. See [MANIPULATOR.md](MANIPULATOR.md#simulation-only-arm-features) for the reasoning, and [MANIPULATOR.md](MANIPULATOR.md#arm-mount-and-lidar-placement) for the arm-mount and lidar moves, which are **not** simulation-only.
+
 ## 🕹️ Demo
 
 Explore demos showcasing the capabilities of ROSbots:

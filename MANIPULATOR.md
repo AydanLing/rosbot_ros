@@ -175,20 +175,48 @@ bearings by `-theta`:
 jaw_z_bearing = -joint1 - theta
 ```
 
-**Tapered V jaws** — replaces the stock flat palms. Each jaw is two pads pitched
-by 18° (the half-angle of a badminton shuttlecock's cone, 13→32.5 mm over
-60 mm) and splayed into a 120° included V whose valley runs along the object
-axis. Flat parallel jaws touch a cone only at its widest station, so it pivots
-and rolls out; the pitched pads stay parallel to the flank along their length
-and the V gives two contact lines a side.
+**Custom claw (`taper_jaws`)** — replaces the stock flat palms. The arg is still
+named `taper_jaws` after the first iteration, which was two flat pads per jaw
+pitched by 18° into a 120° included V, sized for a badminton shuttlecock's cone.
+That shape is gone; what ships now is a user-supplied CAD claw:
+
+- **Visual** — [`Gripper-Left.stl`](rosbot_description/meshes/rosbot_xl/claw/Gripper-Left.stl)
+  and [`Gripper-Right.stl`](rosbot_description/meshes/rosbot_xl/claw/Gripper-Right.stl),
+  mounted with a ±2 mm outboard offset and `rpy="-pi/2 0 pi/2"`.
+- **Collision** — 32 left / 25 right axis-aligned boxes in
+  [`claw_collision.xacro`](rosbot_description/urdf/open_manipulator/claw_collision.xacro),
+  voxelised from those same STLs at 8 mm. **Generated, not hand-written.**
+  Regenerate with `grab_sequence/scripts/mesh_to_collision.py` if the CAD changes;
+  the header of the file says the same thing.
 
 The jaw collision is **boxes, not a mesh** — the physics engine takes a convex
-hull of mesh collisions, which fills the V notch in and removes the only feature
-doing the work. `test_taper_jaw_collisions_are_convex_primitives` pins this.
+hull of mesh collisions, which fills the claw's concave grip pocket in and
+silently turns the wrap into a flat paddle. That is the whole feature, so
+`test_taper_jaw_collisions_are_convex_primitives` pins it.
 
-The V is not symmetric end to end: its gap narrows toward `+z`, so the narrow
-end of a tapered object must be placed there. Getting that 180° wrong points the
-taper the wrong way and grips worse than a flat jaw.
+Keeping the boxes axis-aligned also avoids the trap the first iteration fell
+into. Those pads were rotated 60° about z and 18° about x, which swung their
+30 mm and 75 mm dimensions into the closing direction and moved the corners
+about 20 mm inboard of what the 5 mm pad thickness suggested. The jaws opened
+to 34.8 mm against a 65 mm object and knocked it aside on every approach without
+raising any error. `test_taper_jaws_open_wider_than_the_target` computes the
+opening from the *rendered* boxes rather than from a nominal inset, and fails
+below 70 mm.
+
+**Finger travel.** With the claw on, `gripper_lower` moves from `-0.010` to
+`-0.023`. The claw's grip surfaces sit 2 mm outboard of the finger frame, so the
+gap is `2 × (0.021 + q + 0.002)`; the old stop bottomed out at 26 mm — exactly
+wide enough for a 26 mm shuttlecock cork to slip through. Only the lower stop
+moves, so the open gap is unchanged. Measured on the finished geometry:
+**84.0 mm open, 0.0 mm closed.** The stock hardware jaws keep `-0.010`.
+
+> [!NOTE]
+> The MoveIt `Close` group state in
+> [`rosbot_xl.srdf`](rosbot_moveit/config/rosbot_xl.srdf) is still
+> `gripper_left_joint: -0.009` (a 28 mm gap). The new `-0.023` stop is reachable
+> only by commanding `gripper_controller/joint_trajectory` directly, which is
+> what `joy2servo` does. `joint_limits.yaml` has no explicit min/max for that
+> joint, so planning picks the URDF limit up automatically.
 
 > **Arm joint effort** was raised from a placeholder `1` to `4.1` N·m
 > (`servo_effort` in [`body.xacro`](rosbot_description/urdf/open_manipulator/body.xacro)),
@@ -197,6 +225,52 @@ taper the wrong way and grips worse than a flat jaw.
 > gripper ~30 mm high. This affects **both** hardware and simulation. The
 > prismatic gripper joints keep their original value; raising them to 15 N was
 > tried and did not help close against contact, so it was reverted.
+
+### Arm mount and lidar placement
+
+> [!WARNING]
+> Unlike the two features above, **these two changes are not gated on `use_sim`
+> and apply to the physical robot as well.** They describe a chassis layout that
+> differs from the stock ROSbot XL manipulation build, and hardware needs
+> physical rework to match.
+
+**Arm moved to the chassis front.** In
+[`rosbot_xl.urdf.xacro`](rosbot_description/urdf/rosbot_xl.urdf.xacro) the
+`open_manipulator_x` mount on `cover_link` moved from `-0.11 0.0 0.0` to
+`0.065 0.0 0.0`, so the working zone is ahead of the robot instead of behind it.
+On hardware the arm must actually be bolted at the front, or the URDF and the
+robot disagree and every planned pose is off by 175 mm.
+
+**Lidar moved back and up.** `LDR06` in
+[`manipulation.yaml`](rosbot_description/config/rosbot_xl/manipulation.yaml) and
+[`manipulation_pro.yaml`](rosbot_description/config/rosbot_xl/manipulation_pro.yaml)
+moved from `-0.01 0.0 0.0` to `-0.125 0.0 0.07`. These component files are read
+by both the hardware and the simulation URDF, so this applies to both.
+
+- **Back to `-0.125`** because a forward-working arm sweeps over a
+  centre-mounted lidar; MoveIt reports `gripper_left_link` colliding with
+  `rplidar_link` on the descent. From the rear the arm never reaches over it.
+  Still inside the chassis, whose rear edge is `-0.167`.
+- **Up by `0.07`** so the beam clears the arm's base column, which spans
+  `z 0.133..0.193` and otherwise blanked ±10° dead ahead. **On hardware this
+  needs a riser of the same height** — without one the physical scan will not
+  match the URDF.
+
+> **Known gap, measured not estimated:** a ±5° blind sector remains straight
+> ahead, cast by the arm's upper links at the parked pose. Parking the arm
+> elsewhere only relocates the notch. Clearing it needs either a lateral lidar
+> offset, which moves the blind spot off the forward axis, or a mast above the
+> arm's ~0.45 m envelope. Relevant to nav2 and to the laser filter in
+> [`rosbot_utils/config/rosbot_xl/config.yaml`](rosbot_utils/config/rosbot_xl/config.yaml).
+
+> [!IMPORTANT]
+> Moving the arm mount is exactly the case the "Manipulator position" note above
+> covers: the MoveIt collision matrix should be regenerated. It has **not** been.
+> [`rosbot_xl.srdf`](rosbot_moveit/config/rosbot_xl.srdf) still carries
+> `link1 ↔ rplidar_link reason="Adjacent"` (plus `link2`/`link3` `Never`) from
+> the old layout where the two were next to each other. Those pairs are now
+> merely over-permissive rather than wrong, but the matrix no longer reflects
+> the geometry.
 
 ### Troubleshooting
 

@@ -14,6 +14,8 @@
 
 """xacro -> URDF for every (robot_model, mecanum, configuration) combo."""
 
+import itertools
+import math
 import os
 import xml.etree.ElementTree as ET
 
@@ -146,8 +148,8 @@ def test_components_config_derived_from_configuration():
     )
 
 
-def _process_xacro_sim(use_sim):
-    """manipulation_pro URDF at a chosen use_sim, which the default matrix does
+def _process_xacro_sim(use_sim, configuration="manipulation_pro"):
+    """A manipulation URDF at a chosen use_sim, which the default matrix does
     not vary (it always renders the hardware path)."""
     share = get_package_share_directory("rosbot_description")
     xacro_path = os.path.join(share, "urdf", "rosbot_xl.urdf.xacro")
@@ -155,7 +157,7 @@ def _process_xacro_sim(use_sim):
         xacro_path,
         mappings={
             "mecanum": "True",
-            "configuration": "manipulation_pro",
+            "configuration": configuration,
             "use_sim": use_sim,
         },
     )
@@ -168,7 +170,7 @@ _STOCK_JAW_MESHES = ["gripper_left_palm", "gripper_right_palm"]
 
 
 def test_wrist_roll_and_taper_jaws_are_simulation_only():
-    """joint5 and the tapered V jaws exist only when use_sim is true.
+    """joint5 and the custom claw exist only when use_sim is true.
 
     The physical OpenMANIPULATOR-X is 4-DOF with no roll servo, and
     dynamixel_hardware_interface is pinned to number_of_joints=5 (four arm
@@ -180,9 +182,7 @@ def test_wrist_roll_and_taper_jaws_are_simulation_only():
     hw = _process_xacro_sim("False")
 
     missing = [tag for tag in _SIM_ONLY_ARM if tag not in sim]
-    assert not missing, (
-        "simulation URDF lost its wrist-roll additions: " + ", ".join(missing)
-    )
+    assert not missing, "simulation URDF lost its wrist-roll additions: " + ", ".join(missing)
 
     leaked = [tag for tag in _SIM_ONLY_ARM if tag in hw]
     assert not leaked, (
@@ -191,21 +191,21 @@ def test_wrist_roll_and_taper_jaws_are_simulation_only():
         + ". The 4-DOF arm cannot drive joint5; keep it gated on use_sim."
     )
 
-    # The tapered jaws replace the stock palm meshes rather than adding to them.
+    # The claw replaces the stock palm meshes rather than sitting alongside them.
     for mesh in _STOCK_JAW_MESHES:
         assert mesh in hw, f"hardware URDF must keep the stock jaw mesh {mesh}"
         assert mesh not in sim, (
             f"stock jaw mesh {mesh} is still in the simulation URDF — the "
-            "tapered V jaws are meant to replace it, not sit alongside it."
+            "custom claw is meant to replace it, not sit alongside it."
         )
 
 
 def test_taper_jaw_collisions_are_convex_primitives():
-    """Jaw collision must stay boxes, never a single notched mesh.
+    """Jaw collision must stay boxes, never the claw mesh.
 
-    The V notch is the whole point of the tapered jaw, and a mesh collision is
-    run through a convex hull by the physics engine, which fills the notch in
-    and silently removes the feature that does the gripping.
+    The concave grip pocket is the whole point of the claw, and a mesh collision
+    is run through a convex hull by the physics engine, which fills the pocket
+    in and silently turns the wrap into a flat paddle.
     """
     sim = _process_xacro_sim("True")
     root = ET.fromstring(sim)
@@ -216,65 +216,155 @@ def test_taper_jaw_collisions_are_convex_primitives():
         assert collisions, f"{link_name} has no collision geometry"
         for collision in collisions:
             assert collision.find(".//mesh") is None, (
-                f"{link_name} uses a mesh collision; the convex hull of the "
-                "tapered jaw fills in its V notch. Use box primitives."
+                f"{link_name} uses a mesh collision; its convex hull fills in "
+                "the claw's grip pocket. Use box primitives."
             )
             assert collision.find(".//box") is not None, (
-                f"{link_name} collision is neither box nor mesh — the taper "
-                "geometry expects boxes."
+                f"{link_name} collision is neither box nor mesh — the claw "
+                "collision proxy expects boxes."
             )
 
 
-def test_taper_jaws_open_wider_than_the_target():
-    """The jaws must actually fit around a 65 mm shuttlecock skirt.
+def _rpy_matrix(r, p, y):
+    cr, sr = math.cos(r), math.sin(r)
+    cp, sp = math.cos(p), math.sin(p)
+    cy, sy = math.cos(y), math.sin(y)
+    return [
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp, cp * sr, cp * cr],
+    ]
 
-    Computed from the rendered pad boxes rather than from pad_inset, because
-    each pad is rotated 60 deg about z and 18 deg about x: those rotations swing
-    the 30 mm and 75 mm pad dimensions into the closing direction and move the
-    corners ~20 mm inboard of where the thickness alone suggests. Sizing the
-    inset off the naive gap left a 34.8 mm opening against a 65 mm object, and
-    the jaws knocked it aside on every approach without any error being raised.
+
+def _jaw_gap(root, finger_position):
+    """Gap in metres between the two jaws at a given gripper_left_joint value.
+
+    Measured off the *rendered* collision boxes with their origins and rpy
+    applied, never off a nominal inset in the xacro. The first iteration of
+    these jaws was sized from pad thickness alone; each pad was rotated 60 deg
+    about z and 18 deg about x, which swung its 30 mm and 75 mm dimensions into
+    the closing direction and pulled the corners ~20 mm inboard. The jaws opened
+    to 34.8 mm against a 65 mm object and knocked it aside on every approach
+    without raising any error. The current claw boxes are axis-aligned, so the
+    rotation terms are a no-op today, but they keep this honest if that changes.
+
+    The result is signed and taken from the innermost corner, so the two jaws
+    meeting reads as 0.0 and overshoot reads negative.
     """
-    import itertools
-    import math
-
-    sim = _process_xacro_sim("True")
-    root = ET.fromstring(sim)
-
-    def rpy_matrix(r, p, y):
-        cr, sr, cp, sp, cy, sy = (math.cos(r), math.sin(r), math.cos(p),
-                                  math.sin(p), math.cos(y), math.sin(y))
-        return [
-            [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
-            [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
-            [-sp, cp * sr, cp * cr],
-        ]
-
     joint = root.find('.//joint[@name="gripper_left_joint"]')
     assert joint is not None, "gripper_left_joint missing"
     mount_y = float(joint.find("origin").get("xyz").split()[1])
-    q_open = float(joint.find("limit").get("upper"))
 
     link = root.find('.//link[@name="gripper_left_link"]')
+    assert link is not None, "gripper_left_link missing"
     closest = None
     for collision in link.findall("collision"):
         box = collision.find(".//box")
         if box is None:
             continue
-        hx, hy, hz = [float(v) / 2 for v in box.get("size").split()]
+        half = [float(v) / 2 for v in box.get("size").split()]
         origin = collision.find("origin")
-        ox, oy, oz = [float(v) for v in origin.get("xyz").split()]
-        rot = rpy_matrix(*[float(v) for v in origin.get("rpy").split()])
-        for sx, sy_, sz in itertools.product((-1, 1), repeat=3):
-            local = (sx * hx, sy_ * hy, sz * hz)
-            dy = sum(rot[1][k] * local[k] for k in range(3))
-            dist = abs(mount_y + q_open + oy + dy)
-            closest = dist if closest is None else min(closest, dist)
+        offset_y = float(origin.get("xyz").split()[1])
+        rot = _rpy_matrix(*[float(v) for v in (origin.get("rpy") or "0 0 0").split()])
+        for signs in itertools.product((-1, 1), repeat=3):
+            local = [s * h for s, h in zip(signs, half)]
+            corner_y = sum(rot[1][k] * local[k] for k in range(3))
+            half_gap = mount_y + finger_position + offset_y + corner_y
+            closest = half_gap if closest is None else min(closest, half_gap)
 
     assert closest is not None, "no box collisions found on the jaw"
-    opening = 2 * closest
+    return 2 * closest
+
+
+def test_taper_jaws_open_wider_than_the_target():
+    """The jaws must actually fit around a 65 mm shuttlecock skirt."""
+    root = ET.fromstring(_process_xacro_sim("True"))
+    joint = root.find('.//joint[@name="gripper_left_joint"]')
+    opening = _jaw_gap(root, float(joint.find("limit").get("upper")))
     assert opening > 0.070, (
-        f"tapered jaws open to only {1000 * opening:.1f} mm, which cannot clear "
-        "the 65 mm shuttlecock skirt. Check pad_inset against the *rotated* pad "
-        "corner extents, not the pad thickness."
+        f"claw opens to only {1000 * opening:.1f} mm, which cannot clear the "
+        "65 mm shuttlecock skirt. Check the rendered collision-box corner "
+        "extents, not the nominal pad thickness."
+    )
+
+
+def test_claw_closes_past_the_cork():
+    """The jaws must close far enough to trap a 26 mm shuttlecock cork.
+
+    The stock lower stop of -0.010 bottoms out at a 26 mm gap, exactly wide
+    enough for the cork to slip straight through, which is how the object kept
+    escaping a nominally successful grasp. gripper_lower drops to -0.023 under
+    taper_jaws, which brings the claws to touching. Hardware keeps the stock
+    travel, since it also keeps the stock palms.
+
+    The threshold is 20 mm, not 26 mm: matching the cork diameter exactly leaves
+    no bite, and the stock stop lands on 26 mm to within floating-point noise,
+    so a 26 mm bound would pass on the very geometry this guards against.
+    """
+    sim = ET.fromstring(_process_xacro_sim("True"))
+    sim_joint = sim.find('.//joint[@name="gripper_left_joint"]')
+    closed = _jaw_gap(sim, float(sim_joint.find("limit").get("lower")))
+    assert closed < 0.020, (
+        f"claw only closes to {1000 * closed:.1f} mm; a 26 mm cork needs a real "
+        "bite, not a gap it can slip through. Check gripper_lower in body.xacro."
+    )
+
+    hw = ET.fromstring(_process_xacro_sim("False"))
+    hw_joint = hw.find('.//joint[@name="gripper_left_joint"]')
+    hw_lower = float(hw_joint.find("limit").get("lower"))
+    assert hw_lower == pytest.approx(-0.010), (
+        f"hardware finger travel changed to {hw_lower}; the extra travel is for "
+        "the simulated claw only and the stock palms would drive into contact."
+    )
+
+    # Only the lower stop moves — the open gap must be unaffected.
+    sim_upper = float(sim_joint.find("limit").get("upper"))
+    hw_upper = float(hw_joint.find("limit").get("upper"))
+    assert sim_upper == pytest.approx(hw_upper), "open stop must not differ between sim and HW"
+
+
+@pytest.mark.parametrize("configuration", ["manipulation", "manipulation_pro"])
+@pytest.mark.parametrize("use_sim", ["True", "False"])
+def test_lidar_sits_behind_the_arm_mount(configuration, use_sim):
+    """LDR06 placement is coupled to the arm mount, and not simulation-gated.
+
+    The arm works forward from +0.065 on cover_link. A lidar ahead of it sits
+    inside the swept volume — MoveIt reports gripper_left_link colliding with
+    rplidar_link on the descent — so it moved behind the arm, and up by 0.07 so
+    the beam clears the top of the arm's base column. Both numbers live in the
+    components yaml, which hardware reads too, so this runs at both use_sim
+    values on purpose. Moving one without the other silently reintroduces the
+    collision or the blind sector. See MANIPULATOR.md.
+    """
+    root = ET.fromstring(_process_xacro_sim(use_sim, configuration))
+
+    def origin_on_cover(child_link):
+        for joint in root.iter("joint"):
+            child = joint.find("child")
+            if child is None or child.get("link") != child_link:
+                continue
+            assert joint.find("parent").get("link") == "cover_link", (
+                f"{child_link} no longer hangs directly off cover_link; this "
+                "test compares the two in that frame."
+            )
+            return [float(v) for v in joint.find("origin").get("xyz").split()]
+        raise AssertionError(f"no joint produces {child_link}")
+
+    lidar = origin_on_cover("rplidar_link")
+    arm = origin_on_cover("link1")
+
+    assert lidar[0] < arm[0], (
+        f"lidar x {lidar[0]} is not behind the arm mount x {arm[0]}; a "
+        "forward-working arm sweeps over anything mounted ahead of it."
+    )
+    assert lidar[0] > -0.167, f"lidar x {lidar[0]} is outside the chassis rear edge of -0.167"
+
+    # Top of the arm's base column, in the same cover_link frame.
+    column = root.find('.//link[@name="link1"]/collision')
+    column_z = float(column.find("origin").get("xyz").split()[2])
+    column_top = arm[2] + column_z + float(column.find(".//cylinder").get("length")) / 2
+    assert lidar[2] > column_top, (
+        f"lidar z {lidar[2]} is not above the arm base column top {column_top:.4f}; "
+        "the column blanks roughly +-10 deg dead ahead. On hardware this "
+        "clearance is a physical riser."
     )
