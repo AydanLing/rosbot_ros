@@ -21,6 +21,7 @@ from launch.substitutions import (
     LaunchConfiguration,
 )
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 from moveit_configs_utils import MoveItConfigsBuilder
 
@@ -73,8 +74,17 @@ def generate_launch_description():
             LaunchConfiguration("use_sim"),
         ]
     )
+    # value_type=str is load-bearing, not boilerplate. launch_ros YAML-parses a
+    # substitution's result to infer the parameter type, and the rendered SRDF
+    # starts its comment block with "<!--GROUPS: Representation of..." -- YAML
+    # reads that "GROUPS:" as a mapping key and raises ScannerError, which
+    # aborts the whole launch before Gazebo comes up. The URDF override above
+    # gets away with a bare Command only because its render happens to contain
+    # no "key: value" pattern; that is luck, not a working pattern to copy.
     moveit_config.robot_description_semantic = {
-        "robot_description_semantic": robot_description_semantic_content
+        "robot_description_semantic": ParameterValue(
+            robot_description_semantic_content, value_type=str
+        )
     }
 
     move_group_configuration = {
