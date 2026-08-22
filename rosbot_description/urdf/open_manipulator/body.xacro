@@ -34,13 +34,6 @@
          through a convex hull by the physics engine, which fills the notch in
          and throws away the part that does the work. -->
     <xacro:property name="taper_on" value="${taper_jaws in ['true', 'True', True]}"/>
-    <xacro:property name="cone_half_angle" value="0.3142"/>   <!-- 18 deg -->
-    <xacro:property name="v_half_angle" value="1.0472"/>      <!-- 120 deg included -->
-    <xacro:property name="pad_x" value="0.030"/>              <!-- along the blade -->
-    <xacro:property name="pad_t" value="0.005"/>              <!-- thickness -->
-    <xacro:property name="pad_z" value="0.075"/>              <!-- along the cone axis -->
-    <xacro:property name="pad_centre_x" value="0.045"/>       <!-- matches GRASP_OFFSET -->
-    <xacro:property name="pad_split" value="0.016"/>          <!-- V half-width -->
     <!-- Pads sit outboard of the finger frame. The naive gap of
          2*(0.021 + q - inset) counts only the pad's 5 mm thickness and is
          badly wrong here, because each pad is rotated 60 deg about z and 18 deg
@@ -51,7 +44,6 @@
          At -0.019 the measured opening is 74.8 mm, clearing the 65 mm rim, and
          22.8 mm closed, so the cork can still be pinched. Recompute the corner
          extents if the pad size or either angle changes. -->
-    <xacro:property name="pad_inset" value="-0.019"/>
 
     <!-- Finger travel. The stock jaws keep their original lower stop of
          negative 0.010. The CAD claw needs more. Its grip surfaces sit 2 mm
@@ -64,47 +56,8 @@
 
     <!-- One pad. side=+1 for the left jaw, -1 for the right. lobe=+1/-1 picks
          which half of the V. -->
-    <xacro:macro name="taper_pad" params="side lobe">
-      <collision>
-        <origin xyz="${pad_centre_x + lobe * pad_split} ${-side * pad_inset} 0"
-                rpy="${side * cone_half_angle} 0 ${side * lobe * (v_half_angle / 2)}"/>
-        <geometry>
-          <box size="${pad_x} ${pad_t} ${pad_z}"/>
-        </geometry>
-        <surface>
-          <friction><ode><mu>1.2</mu><mu2>1.2</mu2></ode></friction>
-        </surface>
-      </collision>
-      <visual>
-        <origin xyz="${pad_centre_x + lobe * pad_split} ${-side * pad_inset} 0"
-                rpy="${side * cone_half_angle} 0 ${side * lobe * (v_half_angle / 2)}"/>
-        <geometry>
-          <box size="${pad_x} ${pad_t} ${pad_z}"/>
-        </geometry>
-        <material name="jaw_grey">
-          <color rgba="0.25 0.25 0.28 1"/>
-        </material>
-      </visual>
-    </xacro:macro>
 
     <!-- Backing plate carrying the pads back to the joint. -->
-    <xacro:macro name="taper_spine" params="side">
-      <collision>
-        <origin xyz="0.030 ${-side * pad_inset} 0" rpy="0 0 0"/>
-        <geometry>
-          <box size="0.060 0.008 0.030"/>
-        </geometry>
-      </collision>
-      <visual>
-        <origin xyz="0.030 ${-side * pad_inset} 0" rpy="0 0 0"/>
-        <geometry>
-          <box size="0.060 0.008 0.030"/>
-        </geometry>
-        <material name="jaw_grey">
-          <color rgba="0.25 0.25 0.28 1"/>
-        </material>
-      </visual>
-    </xacro:macro>
 
     <xacro:property name="meshes_dir" value="package://open_manipulator_description/meshes/open_manipulator_x"/>
     <xacro:property name="link1_length" value="0.06"/>
