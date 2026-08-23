@@ -10,6 +10,23 @@ launch:
         - value: 'False'
 
   - arg:
+      name: use_servo
+      default: 'False'
+      description: >-
+        Whether to run moveit_servo and its joy2servo gamepad front end. Off by
+        default because nothing in the autonomous stack drives it. Measured on
+        the badminton court with no trial running, servo_node sat at 64 percent
+        of a core while /servo_node/delta_twist_cmds had zero publishers, and
+        the only publisher on delta_joint_cmds was joy2servo itself. That is a
+        teleop path, so it costs most of a core to serve a gamepad nobody is
+        holding. On an 8 core machine already at load 26 with a real time factor
+        of 0.54, that is the difference between nav2 meeting its control
+        deadlines and timing out. Set True for gamepad teleop.
+      choice:
+        - value: 'True'
+        - value: 'False'
+
+  - arg:
       name: use_sim
       default: 'False'
       description: >-
@@ -63,6 +80,7 @@ launch:
 
   - include:
       file: $(find-pkg-share rosbot_moveit)/launch/servo.launch.py
+      if: $(var use_servo)
 
   - include:
       file: $(find-pkg-share rosbot_moveit)/launch/home.launch.py
