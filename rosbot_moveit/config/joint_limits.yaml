@@ -1,8 +1,23 @@
 ---
 # joint_limits.yaml allows the dynamics properties specified in the URDF to be overwritten or augmented as needed
 
-# For beginners, we downscale velocity and acceleration limits.
-# You can always specify higher scaling factors (<= 1.0) in your motion requests.  # Increase the values below to 1.0 to always move at maximum speed.
+# Left at 0.1, and measured rather than assumed.
+#
+# These are the stock MoveIt Setup Assistant defaults ("for beginners, we
+# downscale") and it is tempting to read a tenth of the joint limits as the
+# reason the pick is slow. It is not. Raising them to 0.5 velocity and 0.35
+# acceleration was tried and timed against this exact bench, a shuttlecock laid
+# on its side at (0.217, 0):
+#
+#     0.1  / 0.1   ->  19.8 s, PASS
+#     0.5  / 0.35  ->  19.5 s, FAIL (knocked object aside)
+#
+# 0.3 s is noise, and the faster arm disturbs the object on the descent. The
+# pick is not traverse-bound: individual trajectory executions already complete
+# in 0.21 to 0.36 s. The time goes on two failed executions at the start
+# (ABORTED then TIMED_OUT, each followed by a 1 s backoff) and a fixed ~0.35 s
+# between every step, roughly 7 s of the 20 between them. That is where to look
+# if the pick needs to get faster; this knob is not it.
 default_velocity_scaling_factor: 0.1
 default_acceleration_scaling_factor: 0.1
 
@@ -12,7 +27,10 @@ joint_limits:
   gripper_left_joint:
     # Prismatic joint (m/s, m/s²); tuned on HW 2026-05-19 (CLAUDE.md sec 9).
     has_velocity_limits: true
-    max_velocity: 0.10  # m/s
+    # 0.30, raised from 0.10. The old value was not being honoured anyway: the
+    # joint was measured peaking at 0.245 m/s, 245% of it, so it was describing
+    # the hardware inaccurately rather than constraining anything.
+    max_velocity: 0.30  # m/s
     has_acceleration_limits: true
     max_acceleration: 2.0  # m/s²
     has_position_limits: true

@@ -74,7 +74,17 @@
          normal operation. Raising it to 15 N was tried and did not help the
          fingers close while in contact with the target, so it was reverted
          rather than left as an unexplained deviation. -->
-    <xacro:property name="gripper_effort" value="1"/>
+    <!-- Newtons, not newton-metres: gripper_left_joint is prismatic, so this is
+         the grip force itself. It was 1 N, which is about the weight of a
+         100 g object and nowhere near enough to close on anything. Measured
+         mid-pick the joint sat at 100% of that limit and stalled at -0.0136
+         against a -0.0230 target, so the jaws never closed. The arm pushed
+         the shuttlecock aside and the trial was scored "knocked object aside",
+         which reads as a perception or approach fault and is neither.
+         10 N is in the range an OpenMANIPULATOR-X gripper actually produces
+         through its linkage. The arm servos, by contrast, peak at 4-15% of
+         their 4.1 Nm and want nothing. -->
+    <xacro:property name="gripper_effort" value="10.0"/>
 
     <xacro:if value="${parent_link != ''}">
       <joint name="${prefix}${parent_link}_to_link1" type="fixed">
