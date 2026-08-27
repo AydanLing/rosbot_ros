@@ -12,7 +12,27 @@ components:
     # Raised 0.07 so the beam clears the arm's base column, which spans
     # z 0.133..0.193 and otherwise blanked +-10 deg dead ahead -- measured, not
     # assumed. On hardware this needs a riser of the same height.
-    xyz: -0.125 0.0 0.07
+    # Rear deck, offset to +y so it sits BESIDE the hopper rather than in
+    # front of the arm or on the centreline.
+    #
+    # Three things compete for this deck and a 70 mm lidar on a 270 mm chassis
+    # does not fit around all of them. Forward of the arm it is inside the grasp
+    # volume, and MoveIt reported the contact directly: "Found a contact between
+    # 'rplidar_link' and 'gripper_left_link'". Pulling it inboard to x 0.115 made
+    # that worse rather than better, because the carry path from the grasp point
+    # at x +0.196 back to the hopper at -0.117 runs straight over it, and there
+    # is no room to lift above: the arm ceiling is z 0.23 and by z 0.22 the
+    # reachable span already stops at x -0.115, short of the hopper.
+    #
+    # Here the hopper occupies y -0.050..+0.050, leaving 85 mm each side. At
+    # y +0.090 the body spans +0.055..+0.125, inside the 0.135 half-width and
+    # 35 mm clear of the carry corridor, which is |y| < 0.070 once the gripper's
+    # own width is counted.
+    #
+    # The cost is coverage. The hopper blanks a sector to the lidar's -y side and
+    # the arm blanks the front, so what is left is a wedge toward +y. AMCL
+    # localises off this, so that is a real loss, not a cosmetic one.
+    xyz: -0.117 0.09 0.02
     rpy: 0.0 0.0 0.0
 
   - type: CAM05

@@ -130,4 +130,26 @@
     <disable_collisions link1="rl_wheel_link" link2="rr_wheel_link" reason="Never"/>
     <disable_collisions link1="rl_wheel_link" link2="rplidar_link" reason="Never"/>
     <disable_collisions link1="rr_wheel_link" link2="rplidar_link" reason="Never"/>
+
+    <!--
+      The hopper did not exist when this file was generated, so nothing here
+      described it and MoveIt treated the gripper reaching into the mouth as a
+      self collision. Every deposit failed with "Arm move failed: over hopper"
+      after FCL rejected the path, even though the target itself had valid IK.
+
+      Only the links that have to enter the mouth are listed. The upper arm and
+      the body are deliberately left checked, so the arm still cannot swing
+      through the hopper on its way somewhere else; what is allowed is the
+      gripper occupying the opening it is meant to drop shuttlecocks into.
+    -->
+    <disable_collisions link1="hopper_link" link2="gripper_left_link" reason="User"/>
+    <disable_collisions link1="hopper_link" link2="gripper_right_link" reason="User"/>
+    <disable_collisions link1="hopper_link" link2="link5" reason="User"/>
+    <disable_collisions link1="hopper_link" link2="end_effector_link" reason="User"/>
+    <!-- Adjacent in practice: the hopper is bolted to the deck. -->
+    <disable_collisions link1="hopper_link" link2="body_link" reason="Adjacent"/>
+    <disable_collisions link1="hopper_link" link2="cover_link" reason="Adjacent"/>
+    <disable_collisions link1="hopper_link" link2="antenna_link" reason="Never"/>
+    <disable_collisions link1="hopper_link" link2="antenna_connector_link" reason="Never"/>
+    <disable_collisions link1="hopper_link" link2="rplidar_link" reason="Never"/>
 </robot>

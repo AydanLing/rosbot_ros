@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Shuttlecock storage hopper, mounted on the chassis rear.
+
+    The mesh is authored in millimetres, hence scale 0.001, and its origin is
+    not at its footprint centre: the solid spans x -41.2..58.8 and y
+    -17.2..82.8 mm, so the centre sits at (8.8, 32.8) mm. The default xyz below
+    subtracts that, which puts the footprint over x -0.167..-0.067 and
+    y -0.050..+0.050 in cover_link, flush with the chassis rear edge at -0.167.
+
+    Flush matters for two reasons. Nothing overhangs the chassis, so
+    robot_radius stays 0.22 in both costmaps and in cmd_vel_guard. And the near
+    face at x -0.067 is 0.132 m from the arm mount at ARM_X 0.065, inside the
+    arm's 0.050..0.218 m reach band, so the arm can actually deposit into it.
+    Pushing it back clear of the chassis would put it at 0.232 m and out of
+    reach.
+
+    This position is where the lidar used to be. LDR06 sat at cover_link
+    (-0.125, 0, 0.07), squarely inside the hopper's footprint, and has since
+    moved forward of the arm. See the note in manipulation_pro.yaml.
+
+    Z is scaled to 0.60 of the authored height, 300 mm down to 180 mm, which
+    makes this a shallow tray rather than the tube it was drawn as, forced by
+    the arm, and the binding constraint is vertical rather than horizontal.
+
+    arm_joints_for holds the tool perpendicular to the floor, and under that
+    constraint the pads cannot be placed above z 0.23 ANYWHERE, probed
+    directly across a grid rather than derived. The deck this sits on is already at
+    0.133, so the whole budget between deck and ceiling is 97 mm, and the
+    release has to happen above the rim with clearance to spare. The mouth sits at 0.313. Height trades against how far the object has to
+    be rotated to carry it: the traverse must clear the rim, a higher rim needs
+    a flatter tool, and a flatter tool turns the shuttlecock further from the
+    attitude it was grasped in. 30 degrees of rotation carried 2/2 and 90
+    dropped 2/2, so this sits at 45, cruising at 0.34 with 27 mm of clearance.
+
+    An earlier version of this comment claimed a 0.72 scale worked, computed
+    from hypot(radius, height) against the 0.254 m shoulder-to-wrist chain.
+    That is the envelope for the WRIST, not for the pads with the tool pointing
+    down, and the deposit failed 5 out of 5 with "No IK for adjusted goal
+    during over hopper".
+  -->
+  <xacro:macro name="hopper"
+               params="parent_link
+                       xyz:='-0.1258 -0.0328 0.0'
+                       rpy:='0.0 0.0 0.0'
+                       tf_prefix:=''">
+
+    <xacro:property name="prefix" value="${tf_prefix + '_' if tf_prefix != '' else ''}" />
+
+    <joint name="${parent_link.rstrip('_link')}_to_${prefix}hopper_joint" type="fixed">
+      <origin xyz="${xyz}" rpy="${rpy}" />
+      <parent link="${parent_link}" />
+      <child link="${prefix}hopper_link" />
+    </joint>
+
+    <link name="${prefix}hopper_link">
+      <visual>
+        <geometry>
+          <mesh filename="package://rosbot_description/meshes/rosbot_xl/components/hopper.stl"
+            scale="0.001 0.001 0.0006" />
+        </geometry>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+        <material name="hopper_grey">
+          <color rgba="0.35 0.35 0.38 1.0" />
+        </material>
+      </visual>
+
+      <!--
+        The mesh itself is the collision geometry rather than a bounding box,
+        because a box would be solid and the point of a hopper is that things
+        go inside it. 3320 triangles is not free in DART; if it costs more than
+        it is worth, the answer is a hollow approximation (four thin walls and a
+        floor), not a solid box.
+      -->
+      <collision>
+        <geometry>
+          <mesh filename="package://rosbot_description/meshes/rosbot_xl/components/hopper.stl"
+            scale="0.001 0.001 0.0006" />
+        </geometry>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+      </collision>
+
+      <inertial>
+        <mass value="0.25" />
+        <origin xyz="0.0088 0.0328 0.150" rpy="0.0 0.0 0.0" />
+        <inertia ixx="0.00206" ixy="0.0" ixz="0.0"
+                 iyy="0.00206" iyz="0.0" izz="0.00042" />
+      </inertial>
+    </link>
+  </xacro:macro>
+</robot>
