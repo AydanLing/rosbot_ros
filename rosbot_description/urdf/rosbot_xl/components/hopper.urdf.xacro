@@ -20,7 +20,7 @@
     (-0.125, 0, 0.07), squarely inside the hopper's footprint, and has since
     moved forward of the arm. See the note in manipulation_pro.yaml.
 
-    Z is scaled to 0.60 of the authored height, 300 mm down to 180 mm, which
+    Z is scaled to 0.50 of the authored height, 300 mm down to 150 mm, which
     makes this a shallow tray rather than the tube it was drawn as, forced by
     the arm, and the binding constraint is vertical rather than horizontal.
 
@@ -28,7 +28,10 @@
     constraint the pads cannot be placed above z 0.23 ANYWHERE, probed
     directly across a grid rather than derived. The deck this sits on is already at
     0.133, so the whole budget between deck and ceiling is 97 mm, and the
-    release has to happen above the rim with clearance to spare. The mouth sits at 0.313. Height trades against how far the object has to
+    release has to happen above the rim with clearance to spare. The mouth sits at 0.283. It came down from 180 mm when the pickup
+    standoff moved out to 0.195: a further grasp radius lowers the arm's
+    ceiling, and both carry stages ended up sitting exactly ON their reach
+    limits, where move_to_point's re-aim pushes past and returns no IK. Height trades against how far the object has to
     be rotated to carry it: the traverse must clear the rim, a higher rim needs
     a flatter tool, and a flatter tool turns the shuttlecock further from the
     attitude it was grasped in. 30 degrees of rotation carried 2/2 and 90
@@ -58,7 +61,7 @@
       <visual>
         <geometry>
           <mesh filename="package://rosbot_description/meshes/rosbot_xl/components/hopper.stl"
-            scale="0.001 0.001 0.0006" />
+            scale="0.001 0.001 0.0005" />
         </geometry>
         <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
         <material name="hopper_grey">
@@ -76,7 +79,7 @@
       <collision>
         <geometry>
           <mesh filename="package://rosbot_description/meshes/rosbot_xl/components/hopper.stl"
-            scale="0.001 0.001 0.0006" />
+            scale="0.001 0.001 0.0005" />
         </geometry>
         <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
       </collision>
