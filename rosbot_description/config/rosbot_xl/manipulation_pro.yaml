@@ -37,5 +37,29 @@ components:
 
   - type: CAM05
     parent_link: link5
-    xyz: 0.02 0.0 0.07
-    rpy: 0.0 0.2 0.0
+    # Eye-in-hand, 100 mm out along link5, with no mount pitch of its own.
+    #
+    # rpy all-zero is the useful part. It means the arm alone aims the camera,
+    # and the relationship is exactly:
+    #
+    #     look angle below horizontal = -(joint2 + joint3 + joint4)
+    #
+    # so a pose can be chosen in RViz and read straight off the joint values
+    # with no mount term to subtract. Two poses matter, both measured:
+    #
+    #   park  (0, -1.0, 0.7, 0.3), sum 0.000  ->  camera 0.449 m up, dead level
+    #   grasp (0, -0.583, -0.091, 1.849), sum 1.174  ->  0.433 m up, 67.3 deg down
+    #
+    # Level sounds wrong for looking at a floor and is not: the vertical field
+    # of view is 77.5 deg, so the floor enters frame 0.56 m out and runs to the
+    # horizon. That is what gives the autonomous search its roughly 3 m radius,
+    # and it is why the parked pose doubles as the cruise pose while driving.
+    #
+    # The grasp pose is the opposite case. Steeply down and almost overhead, it
+    # reads the target at 0.33..0.38 m, which is much closer than the geometry
+    # suggests and sets a hard floor on any near-range rejection gate. See
+    # MIN_DETECT_RANGE in grab_sequence/grab_sequence/detect_params.py: a value
+    # of 0.40 there, chosen to ignore an object held in the jaws, silently
+    # rejected the object the pick was reaching for and broke every grasp.
+    xyz: 0.02 0.0 0.10
+    rpy: 0.0 0.0 0.0
